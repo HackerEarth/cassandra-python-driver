@@ -18,7 +18,6 @@ except ImportError:
     import unittest
 
 import os, sys, traceback, logging, ssl
-import time
 from cassandra.cluster import Cluster
 from cassandra import ConsistencyLevel
 from cassandra.query import SimpleStatement
@@ -27,21 +26,22 @@ from tests.integration import use_singledc, PROTOCOL_VERSION, get_cluster, remov
 log = logging.getLogger(__name__)
 
 DEFAULT_PASSWORD = "cassandra"
+
+# Server keystore trust store locations
 SERVER_KEYSTORE_PATH = "tests/integration/long/ssl/server_keystore.jks"
 SERVER_TRUSTSTORE_PATH = "tests/integration/long/ssl/server_trust.jks"
+
+# Client specific keys/certs
 CLIENT_CA_CERTS = 'tests/integration/long/ssl/driver_ca_cert.pem'
-
-CLIENT_CA_CERTS_BAD = 'tests/integration/long/ssl/driver_ca_cert_bad.pem'
-
-DRIVER_CERTFILE_BAD = "tests/integration/long/ssl/python_driver_bad.pem"
 DRIVER_KEYFILE = "tests/integration/long/ssl/python_driver_no_pass.key"
 DRIVER_CERTFILE = "tests/integration/long/ssl/python_driver.pem"
+DRIVER_CERTFILE_BAD = "tests/integration/long/ssl/python_driver_bad.pem"
 
 
 def setup_cluster_ssl(client_auth=False):
     """
     We need some custom setup for this module. This will start the ccm cluster with basic
-    ssl connectivity. No client authentication is performed at this time.
+    ssl connectivity, and client authenticiation if needed.
     """
 
     use_singledc(start=False)
@@ -80,17 +80,10 @@ def teardown_module():
 
 class SSLConnectionTests(unittest.TestCase):
 
-    initalized = False
-
-    def __init__(self, *args, **kwargs):
-        self.initialized = False
-
-        print('BasicTest.__init__')
-        super(SSLConnectionTests, self).__init__(*args, **kwargs)
-
-    def setUp(self):
-        if not self.initalized:
-            setup_cluster_ssl()
+    @classmethod
+    def setUpClass(cls):
+        print("initializing cluster")
+        setup_cluster_ssl()
 
     def test_can_connect_with_ssl_ca(self):
         """
@@ -108,7 +101,7 @@ class SSLConnectionTests(unittest.TestCase):
         @test_category connection:ssl
         """
 
-        # Setup temporary keyspace.
+        # find absolute path to client CA_CERTS
         abs_path_ca_cert_path = os.path.abspath(CLIENT_CA_CERTS)
 
         tries = 0
@@ -143,25 +136,17 @@ class SSLConnectionTests(unittest.TestCase):
 
 
 class SSLConnectionAuthTests(unittest.TestCase):
-    initalized = False
 
-    def __init__(self, *args, **kwargs):
-        self.initialized = False
-
-        print('BasicTest.__init__')
-        super(SSLConnectionAuthTests, self).__init__(*args, **kwargs)
-
-    def setUp(self):
-        if not self.initalized:
-            setup_cluster_ssl(client_auth=True)
-            self.initialized = True
+    @classmethod
+    def setUpClass(cls):
+        setup_cluster_ssl(client_auth=True)
 
     def test_can_connect_with_ssl_client_auth(self):
         """
         Test to validate that we can connect to a C* cluster that has client_auth enabled.
 
         This test will setup and use a c* cluster that has client authentication enabled. It will then attempt
-        to connect using valid client keys, and certs (that are in the servers truststore), and attempt to preform some
+        to connect using valid client keys, and certs (that are in the server's truststore), and attempt to preform some
         basic operations
         @since 2.7.0
 
@@ -170,7 +155,7 @@ class SSLConnectionAuthTests(unittest.TestCase):
         @test_category connection:ssl
         """
 
-        # Need to get absolute paths for cets
+        # Need to get absolute paths for certs/key
         abs_path_ca_cert_path = os.path.abspath(CLIENT_CA_CERTS)
         abs_driver_keyfile = os.path.abspath(DRIVER_KEYFILE)
         abs_driver_certfile = os.path.abspath(DRIVER_CERTFILE)
@@ -227,9 +212,6 @@ class SSLConnectionAuthTests(unittest.TestCase):
         # attempt to connect and expect an exception
         with self.assertRaises(Exception) as context:
             cluster.connect()
-        print context.exception
-
-        self.assertTrue("Unable to connect" in context.exception)
 
     def test_cannot_connect_with_bad_client_auth(self):
         """
@@ -256,6 +238,3 @@ class SSLConnectionAuthTests(unittest.TestCase):
                                                                           'certfile': abs_driver_certfile})
         with self.assertRaises(Exception) as context:
             cluster.connect()
-
-        print context.exception
-        self.assertTrue("Unable to connect" in context.exception)
