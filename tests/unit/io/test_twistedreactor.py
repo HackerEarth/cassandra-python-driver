@@ -26,6 +26,8 @@ except ImportError:
     twistedreactor = None  # NOQA
 
 from cassandra.connection import _Frame
+from tests.unit.io.utils import submit_and_wait_for_completion
+
 
 class TestTwistedProtocol(unittest.TestCase):
 
@@ -196,3 +198,36 @@ class TestTwistedConnection(unittest.TestCase):
         self.obj_ut.push('123 pickup')
         self.mock_reactor_cft.assert_called_with(
             self.obj_ut.connector.transport.write, '123 pickup')
+
+    def test_multi_timer_validation(self):
+        """
+        Verify that timer timeouts are honored appropriately
+        """
+        connection = self.obj_ut
+        submit_and_wait_for_completion(self, connection, 0, 100, 1, 100)
+        submit_and_wait_for_completion(self, connection, 100, 0, -1, 100)
+
+
+class TestTwistedTimer(unittest.TestCase):
+    """
+    Simple test class that is used to validate that the TimerManager, and timer
+    classes function appropriately with the twisted infrastructure
+    """
+    def setUp(self):
+        if twistedreactor is None:
+            raise unittest.SkipTest("Twisted libraries not available")
+        twistedreactor.TwistedConnection.initialize_reactor()
+        self.obj_ut = twistedreactor.TwistedConnection('1.2.3.4',
+                                                       cql_version='3.0.1')
+
+    def tearDown(self):
+        self.obj_ut._loop._cleanup()
+
+    def test_multi_timer_validation(self):
+        """
+        Verify that timer timeouts are honored appropriately
+        """
+        connection = self.obj_ut
+        submit_and_wait_for_completion(self, connection, 0, 100, 1, 100)
+        submit_and_wait_for_completion(self, connection, 100, 0, -1, 100)
+        submit_and_wait_for_completion(self, connection, 0, 100, 1, 100, True)

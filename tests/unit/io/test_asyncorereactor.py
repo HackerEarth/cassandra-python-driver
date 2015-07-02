@@ -21,6 +21,7 @@ except ImportError:
 
 import errno
 import math
+import time
 from mock import patch, Mock
 import os
 from six import BytesIO
@@ -28,13 +29,15 @@ import socket
 from socket import error as socket_error
 
 from cassandra.connection import (HEADER_DIRECTION_TO_CLIENT,
-                                  ConnectionException, ProtocolError)
+                                  ConnectionException, ProtocolError,Timer)
 from cassandra.io.asyncorereactor import AsyncoreConnection
 from cassandra.protocol import (write_stringmultimap, write_int, write_string,
                                 SupportedMessage, ReadyMessage, ServerError)
 from cassandra.marshal import uint8_pack, uint32_pack, int32_pack
 
 from tests import is_monkey_patched
+from tests.unit.io.utils import TimerCallback
+from tests.unit.io.utils import submit_and_wait_for_completion
 
 
 class AsyncoreConnectionTest(unittest.TestCase):
@@ -300,3 +303,25 @@ class AsyncoreConnectionTest(unittest.TestCase):
 
         self.assertTrue(c.connected_event.is_set())
         self.assertFalse(c.is_defunct)
+
+    def test_basic_timer_validation(self, *args):
+        c = self.make_connection()
+        callback = TimerCallback(.5)
+        AsyncoreConnection.create_timer(.5, callback.invoke)
+        start_time = time.time()
+        while not callback.was_invoked():
+            time.sleep(.001)
+
+        end_time = time.time()
+        print str(end_time-start_time)
+
+    def test_multi_timer_validation(self, *args):
+        """
+        Verify that timer timeouts are honored appropriately
+        """
+        c = self.make_connection()
+        submit_and_wait_for_completion(self, AsyncoreConnection, 0, 100, 1, 100)
+        submit_and_wait_for_completion(self, AsyncoreConnection, 100, 0, -1, 100)
+        submit_and_wait_for_completion(self, AsyncoreConnection, 0, 100, 1, 100, True)
+
+

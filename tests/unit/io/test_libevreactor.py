@@ -24,6 +24,7 @@ import six
 from six import BytesIO
 from socket import error as socket_error
 import sys
+import time
 
 from cassandra.connection import (HEADER_DIRECTION_TO_CLIENT,
                                   ConnectionException, ProtocolError)
@@ -31,6 +32,10 @@ from cassandra.connection import (HEADER_DIRECTION_TO_CLIENT,
 from cassandra.protocol import (write_stringmultimap, write_int, write_string,
                                 SupportedMessage, ReadyMessage, ServerError)
 from cassandra.marshal import uint8_pack, uint32_pack, int32_pack
+from tests.unit.io.utils import TimerCallback
+from tests.unit.io.utils import submit_and_wait_for_completion
+from tests import is_gevent_monkey_patched, is_eventlet_monkey_patched
+
 
 try:
     from cassandra.io.libevreactor import LibevConnection
@@ -46,7 +51,7 @@ except ImportError:
 class LibevConnectionTest(unittest.TestCase):
 
     def setUp(self):
-        if 'gevent.monkey' in sys.modules:
+        if is_gevent_monkey_patched():
             raise unittest.SkipTest("Can't test libev with monkey patching")
         if LibevConnection is None:
             raise unittest.SkipTest('libev does not appear to be installed correctly')
@@ -291,3 +296,24 @@ class LibevConnectionTest(unittest.TestCase):
 
         self.assertTrue(c.connected_event.is_set())
         self.assertFalse(c.is_defunct)
+
+    def test_basic_timer_validation(self, *args):
+        c = self.make_connection()
+        callback = TimerCallback(.5)
+        c.create_timer(.5, callback.invoke)
+        start_time = time.time()
+        while not callback.was_invoked():
+            time.sleep(.001)
+
+        end_time = time.time()
+        print str(end_time-start_time)
+
+    def test_multi_timer_validation(self, *args):
+        """
+        Verify that timer timeouts are honored appropriately
+        """
+        c = self.make_connection()
+        c.initialize_reactor()
+        time.sleep(1)
+        submit_and_wait_for_completion(self, c, 0, 100, 1, 100)
+        submit_and_wait_for_completion(self, c, 100, 0, -1, 100)
