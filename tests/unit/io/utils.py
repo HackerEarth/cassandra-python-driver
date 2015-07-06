@@ -98,6 +98,7 @@ def submit_and_wait_for_completion(unit_test, connection, start, end, increment,
             if callback.was_invoked():
                 pending_callbacks.remove(callback)
                 completed_callbacks.append(callback)
+        time.sleep(.01)
 
     # ensure they are all called back in a timely fashion
     for callback in completed_callbacks:
