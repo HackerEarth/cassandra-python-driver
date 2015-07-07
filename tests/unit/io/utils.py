@@ -44,6 +44,7 @@ class TimerCallback():
             return True
         return False
 
+
 def get_timeout(gross_time, start, end, precision, split_range):
     """
     A somewhat complecated way to generate varying timeouts based on ranges
@@ -98,7 +99,7 @@ def submit_and_wait_for_completion(unit_test, connection, start, end, increment,
             if callback.was_invoked():
                 pending_callbacks.remove(callback)
                 completed_callbacks.append(callback)
-        time.sleep(.01)
+        time.sleep(.1)
 
     # ensure they are all called back in a timely fashion
     for callback in completed_callbacks:

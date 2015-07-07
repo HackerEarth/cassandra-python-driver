@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from eventlet import monkey_patch
-monkey_patch()
+
 
 try:
     import unittest2 as unittest
 except ImportError:
     import unittest # noqa
-
+from eventlet import monkey_patch
+from eventlet_utils import  eventlet_un_patch_all
 from tests.unit.io.utils import submit_and_wait_for_completion
 from tests import is_eventlet_monkey_patched
 

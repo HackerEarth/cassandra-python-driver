@@ -25,8 +25,30 @@ try:
 except ImportError:
     twistedreactor = None  # NOQA
 
+    from twisted.internet import base
 from cassandra.connection import _Frame
 from tests.unit.io.utils import submit_and_wait_for_completion
+
+
+class TestTwistedTimer(unittest.TestCase):
+    """
+    Simple test class that is used to validate that the TimerManager, and timer
+    classes function appropriately with the twisted infrastructure
+    """
+
+    def setUp(self):
+        if twistedreactor is None:
+            raise unittest.SkipTest("Twisted libraries not available")
+        twistedreactor.TwistedConnection.initialize_reactor()
+
+    def test_multi_timer_validation(self):
+        twistedreactor.TwistedConnection.initialize_reactor()
+        self.connection = twistedreactor.TwistedConnection('1.2.3.4',
+                                                       cql_version='3.0.1')
+
+        submit_and_wait_for_completion(self, self.connection, 0, 100, 1, 100)
+        submit_and_wait_for_completion(self, self.connection, 100, 0, -1, 100)
+        submit_and_wait_for_completion(self, self.connection, 0, 100, 1, 100, True)
 
 
 class TestTwistedProtocol(unittest.TestCase):
@@ -98,8 +120,6 @@ class TestTwistedConnection(unittest.TestCase):
         twistedreactor.TwistedConnection.initialize_reactor()
         self.reactor_cft_patcher = patch(
             'twisted.internet.reactor.callFromThread')
-        self.reactor_running_patcher = patch(
-            'twisted.internet.reactor.running', False)
         self.reactor_run_patcher = patch('twisted.internet.reactor.run')
         self.mock_reactor_cft = self.reactor_cft_patcher.start()
         self.mock_reactor_run = self.reactor_run_patcher.start()
@@ -109,7 +129,6 @@ class TestTwistedConnection(unittest.TestCase):
     def tearDown(self):
         self.reactor_cft_patcher.stop()
         self.reactor_run_patcher.stop()
-        self.obj_ut._loop._cleanup()
 
     def test_connection_initialization(self):
         """
@@ -199,35 +218,3 @@ class TestTwistedConnection(unittest.TestCase):
         self.mock_reactor_cft.assert_called_with(
             self.obj_ut.connector.transport.write, '123 pickup')
 
-    def test_multi_timer_validation(self):
-        """
-        Verify that timer timeouts are honored appropriately
-        """
-        connection = self.obj_ut
-        submit_and_wait_for_completion(self, connection, 0, 100, 1, 100)
-        submit_and_wait_for_completion(self, connection, 100, 0, -1, 100)
-
-
-class TestTwistedTimer(unittest.TestCase):
-    """
-    Simple test class that is used to validate that the TimerManager, and timer
-    classes function appropriately with the twisted infrastructure
-    """
-    def setUp(self):
-        if twistedreactor is None:
-            raise unittest.SkipTest("Twisted libraries not available")
-        twistedreactor.TwistedConnection.initialize_reactor()
-        self.obj_ut = twistedreactor.TwistedConnection('1.2.3.4',
-                                                       cql_version='3.0.1')
-
-    def tearDown(self):
-        self.obj_ut._loop._cleanup()
-
-    def test_multi_timer_validation(self):
-        """
-        Verify that timer timeouts are honored appropriately
-        """
-        connection = self.obj_ut
-        submit_and_wait_for_completion(self, connection, 0, 100, 1, 100)
-        submit_and_wait_for_completion(self, connection, 100, 0, -1, 100)
-        submit_and_wait_for_completion(self, connection, 0, 100, 1, 100, True)

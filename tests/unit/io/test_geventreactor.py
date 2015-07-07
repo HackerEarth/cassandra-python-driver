@@ -13,7 +13,8 @@
 # limitations under the License.
 
 import gevent.monkey
-gevent.monkey.patch_all()
+# gevent.monkey.patch_all()
+from gevent_utils import gevent_un_patch_all
 
 try:
     import unittest2 as unittest
@@ -34,19 +35,22 @@ class GeventTimerTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+
+        if not is_gevent_monkey_patched():
+            gevent.monkey.patch_all()
         if not is_gevent_monkey_patched():
             raise unittest.SkipTest("Can't test gevent without monkey patching")
+
         GeventConnection.initialize_reactor()
 
     @classmethod
     def tearDownClass(cls):
-        if not is_gevent_monkey_patched():
-            return
+        if is_gevent_monkey_patched():
+            gevent_un_patch_all()
+        if is_gevent_monkey_patched():
+            print "Error un patching gevent this is bad"
 
     def test_multi_timer_validation(self, *args):
-        """
-        Verify that timer timeouts are honored appropriately
-        """
         submit_and_wait_for_completion(self, GeventConnection, 0, 100, 1, 100)
         submit_and_wait_for_completion(self, GeventConnection, 100, 0, -1, 100)
         submit_and_wait_for_completion(self, GeventConnection, 0, 100, 1, 100, True)
