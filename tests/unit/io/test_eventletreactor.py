@@ -13,13 +13,11 @@
 # limitations under the License.
 
 
-
 try:
     import unittest2 as unittest
 except ImportError:
     import unittest # noqa
-from eventlet import monkey_patch
-from eventlet_utils import  eventlet_un_patch_all
+
 from tests.unit.io.utils import submit_and_wait_for_completion
 from tests import is_eventlet_monkey_patched
 
@@ -34,6 +32,8 @@ class EventletTimerTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        if EventletConnection is None:
+            raise unittest.SkipTest("Eventlet libraries not available")
         if not is_eventlet_monkey_patched():
             raise unittest.SkipTest("Can't test eventlet without monkey patching")
         EventletConnection.initialize_reactor()

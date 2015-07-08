@@ -311,9 +311,7 @@ class AsyncoreConnectionTest(unittest.TestCase):
         start_time = time.time()
         while not callback.was_invoked():
             time.sleep(.001)
-
         end_time = time.time()
-        print str(end_time-start_time)
 
     def test_multi_timer_validation(self, *args):
         """

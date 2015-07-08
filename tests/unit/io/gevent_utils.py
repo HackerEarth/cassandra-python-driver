@@ -34,13 +34,10 @@ def gevent_un_patch_all():
 def restore_saved_module(module):
 
     if not (module in monkey.saved):
-        print "no module {0} found nothing unpatch".format(module)
         return
     _module = __import__(module)
 
-    print "restoring"+str(monkey.saved[module])
     for attr in monkey.saved[module]:
-        print "setting "+str(_module) + str(attr) + " to " + str(monkey.saved[module][attr])
         if hasattr(_module, attr):
             setattr(_module, attr, monkey.saved[module][attr])
 

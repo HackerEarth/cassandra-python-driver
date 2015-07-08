@@ -12,9 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import gevent.monkey
-# gevent.monkey.patch_all()
-from gevent_utils import gevent_un_patch_all
+
+
 
 try:
     import unittest2 as unittest
@@ -27,6 +26,8 @@ from tests import is_gevent_monkey_patched
 
 try:
     from cassandra.io.geventreactor import GeventConnection
+    import gevent.monkey
+    from gevent_utils import gevent_un_patch_all
 except ImportError:
     GeventConnection = None  # noqa
 
@@ -35,7 +36,8 @@ class GeventTimerTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-
+        if GeventConnection is None:
+            raise unittest.SkipTest("Gevent libraries not available")
         if not is_gevent_monkey_patched():
             gevent.monkey.patch_all()
         if not is_gevent_monkey_patched():
@@ -47,8 +49,6 @@ class GeventTimerTest(unittest.TestCase):
     def tearDownClass(cls):
         if is_gevent_monkey_patched():
             gevent_un_patch_all()
-        if is_gevent_monkey_patched():
-            print "Error un patching gevent this is bad"
 
     def test_multi_timer_validation(self, *args):
         submit_and_wait_for_completion(self, GeventConnection, 0, 100, 1, 100)

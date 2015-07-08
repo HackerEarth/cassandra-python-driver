@@ -25,7 +25,6 @@ try:
 except ImportError:
     twistedreactor = None  # NOQA
 
-    from twisted.internet import base
 from cassandra.connection import _Frame
 from tests.unit.io.utils import submit_and_wait_for_completion
 
