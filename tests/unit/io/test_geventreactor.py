@@ -20,7 +20,8 @@ try:
 except ImportError:
     import unittest # noqa
 
-from tests.unit.io.utils import submit_and_wait_for_completion
+import time
+from tests.unit.io.utils import submit_and_wait_for_completion, TimerCallback
 from tests import is_gevent_monkey_patched
 
 
@@ -53,4 +54,21 @@ class GeventTimerTest(unittest.TestCase):
     def test_multi_timer_validation(self, *args):
         submit_and_wait_for_completion(self, GeventConnection, 0, 100, 1, 100)
         submit_and_wait_for_completion(self, GeventConnection, 100, 0, -1, 100)
-        submit_and_wait_for_completion(self, GeventConnection, 0, 100, 1, 100, True)
+        submit_and_wait_for_completion(self, GeventConnection, 0, 100, 1, 100, True),
+
+    def test_timer_cancellation(self):
+        """
+        Verify that timer cancellation is honored
+        """
+
+        # Various lists for tracking callback stage
+        timeout = .1
+        callback = TimerCallback(timeout)
+        timer = GeventConnection.create_timer(timeout, callback.invoke)
+        timer.cancel()
+        # Release context allow for timer thread to run.
+        time.sleep(.2)
+        timer_manager = GeventConnection._timers
+        self.assertFalse(timer_manager._queue)
+        self.assertFalse(timer_manager._new_timers)
+        self.assertFalse(callback.was_invoked())

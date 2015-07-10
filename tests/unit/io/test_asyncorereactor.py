@@ -36,8 +36,8 @@ from cassandra.protocol import (write_stringmultimap, write_int, write_string,
 from cassandra.marshal import uint8_pack, uint32_pack, int32_pack
 
 from tests import is_monkey_patched
-from tests.unit.io.utils import TimerCallback
-from tests.unit.io.utils import submit_and_wait_for_completion
+
+from tests.unit.io.utils import submit_and_wait_for_completion, TimerCallback
 
 
 class AsyncoreConnectionTest(unittest.TestCase):
@@ -321,5 +321,24 @@ class AsyncoreConnectionTest(unittest.TestCase):
         submit_and_wait_for_completion(self, AsyncoreConnection, 0, 100, 1, 100)
         submit_and_wait_for_completion(self, AsyncoreConnection, 100, 0, -1, 100)
         submit_and_wait_for_completion(self, AsyncoreConnection, 0, 100, 1, 100, True)
+
+    def test_timer_cancellation(self):
+        """
+        Verify that timer cancellation is honored
+        """
+
+        # Various lists for tracking callback stage
+        connection = self.make_connection()
+        timeout = .1
+        callback = TimerCallback(timeout)
+        timer = connection.create_timer(timeout, callback.invoke)
+        timer.cancel()
+        # Release context allow for timer thread to run.
+        time.sleep(.2)
+        timer_manager = connection._loop._timers
+        self.assertFalse(timer_manager._queue)
+        self.assertFalse(timer_manager._new_timers)
+        self.assertFalse(callback.was_invoked())
+
 
 

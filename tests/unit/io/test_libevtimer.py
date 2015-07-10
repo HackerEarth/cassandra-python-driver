@@ -21,8 +21,8 @@ from mock import patch, Mock
 
 import time
 
-from tests.unit.io.utils import submit_and_wait_for_completion
-from tests import is_gevent_monkey_patched, is_eventlet_monkey_patched
+from tests.unit.io.utils import submit_and_wait_for_completion, TimerCallback
+from tests import is_monkey_patched
 
 
 try:
@@ -35,7 +35,7 @@ except ImportError:
 class LibevTimerTest(unittest.TestCase):
 
     def setUp(self):
-        if is_gevent_monkey_patched():
+        if is_monkey_patched():
             raise unittest.SkipTest("Can't test libev with monkey patching")
         if LibevConnection is None:
             raise unittest.SkipTest('libev does not appear to be installed correctly')
@@ -56,4 +56,22 @@ class LibevTimerTest(unittest.TestCase):
         submit_and_wait_for_completion(self, c, 0, 100, 1, 100)
         submit_and_wait_for_completion(self, c, 100, 0, -1, 100)
         submit_and_wait_for_completion(self, c, 0, 100, 1, 100, True)
+
+    def test_timer_cancellation(self, *args):
+        """
+        Verify that timer cancellation is honored
+        """
+
+        # Various lists for tracking callback stage
+        connection = self.make_connection()
+        timeout = .1
+        callback = TimerCallback(timeout)
+        timer = connection.create_timer(timeout, callback.invoke)
+        timer.cancel()
+        # Release context allow for timer thread to run.
+        time.sleep(.2)
+        timer_manager = connection._libevloop._timers
+        self.assertFalse(timer_manager._queue)
+        self.assertFalse(timer_manager._new_timers)
+        self.assertFalse(callback.was_invoked())
 

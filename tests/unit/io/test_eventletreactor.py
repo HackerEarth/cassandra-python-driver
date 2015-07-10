@@ -18,8 +18,9 @@ try:
 except ImportError:
     import unittest # noqa
 
-from tests.unit.io.utils import submit_and_wait_for_completion
+from tests.unit.io.utils import submit_and_wait_for_completion, TimerCallback
 from tests import is_eventlet_monkey_patched
+import time
 
 
 try:
@@ -50,3 +51,20 @@ class EventletTimerTest(unittest.TestCase):
         submit_and_wait_for_completion(self, EventletConnection, 0, 100, 1, 100)
         submit_and_wait_for_completion(self, EventletConnection, 100, 0, -1, 100)
         submit_and_wait_for_completion(self, EventletConnection, 0, 100, 1, 100, True)
+
+    def test_timer_cancellation(self):
+        """
+        Verify that timer cancellation is honored
+        """
+
+        # Various lists for tracking callback stage
+        timeout = .1
+        callback = TimerCallback(timeout)
+        timer = EventletConnection.create_timer(timeout, callback.invoke)
+        timer.cancel()
+        # Release context allow for timer thread to run.
+        time.sleep(.2)
+        timer_manager = EventletConnection._timers
+        self.assertFalse(timer_manager._queue)
+        self.assertFalse(timer_manager._new_timers)
+        self.assertFalse(callback.was_invoked())

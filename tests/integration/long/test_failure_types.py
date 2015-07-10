@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import sys, logging, traceback
+import sys, logging, traceback, time
 
 from cassandra import ConsistencyLevel, OperationTimedOut, ReadTimeout, WriteTimeout, ReadFailure, WriteFailure,\
     FunctionFailure
@@ -20,6 +20,7 @@ from cassandra.cluster import Cluster
 from cassandra.concurrent import execute_concurrent_with_args
 from cassandra.query import SimpleStatement
 from tests.integration import use_singledc, PROTOCOL_VERSION, get_cluster, setup_keyspace, remove_cluster
+
 
 try:
     import unittest2 as unittest
@@ -301,3 +302,73 @@ class ClientExceptionTests(unittest.TestCase):
             """
             DROP TABLE test3rf.d;
             """, consistency_level=ConsistencyLevel.ALL, expected_exception=None)
+
+
+class TimeoutTimerTest(unittest.TestCase):
+    def setUp(self):
+
+        self.cluster = Cluster(protocol_version=PROTOCOL_VERSION)
+        self.session = self.cluster.connect()
+        self.nodes_currently_failing = []
+        self.node1, self.node2, self.node3 = get_cluster().nodes.values()
+        self.cluster = Cluster(protocol_version=PROTOCOL_VERSION)
+        self.session = self.cluster.connect()
+
+        ddl = '''
+            CREATE TABLE test3rf.timeout (
+                k int PRIMARY KEY,
+                v int )'''
+        self.session.execute(ddl)
+        self.node1.pause()
+
+    def tearDown(self):
+        """
+        Shutdown cluster
+        """
+        self.node1.resume()
+        self.session.execute("DROP TABLE test3rf.timeout")
+        self.cluster.shutdown()
+
+    def test_async_timeouts(self):
+        """
+        Test to validate that timeouts are honored
+
+
+        Exercise the underlying timeouts, by attempting a query that will timeout. Ensure the default timeout is still
+        honored. Make sure that user timeouts are also honored.
+
+        @since 2.7.0
+        @jira_ticket PYTHON-108
+        @expected_result timeouts should be honored
+
+        @test_category
+
+        """
+
+        ss = SimpleStatement('SELECT * FROM test3rf.test', consistency_level=ConsistencyLevel.ALL)
+
+        # Test with default timeout (should be 10)
+        start_time = time.time()
+        future = self.session.execute_async(ss)
+        with self.assertRaises(OperationTimedOut):
+            future.result()
+        end_time = time.time()
+        total_time = end_time-start_time
+        expected_time = 10
+        # check timeout and ensure it's within a reasonable range
+        self.assertTrue(expected_time-.05 <= total_time <= expected_time+.05)
+
+        # Test with user defined timeout (Should be 1)
+        start_time = time.time()
+        future = self.session.execute_async(ss, timeout=1)
+        with self.assertRaises(OperationTimedOut):
+            future.result()
+        end_time = time.time()
+        total_time = end_time-start_time
+        expected_time = 1
+        # check timeout and ensure it's within a reasonable range
+        self.assertTrue(expected_time-.05 <= total_time <= expected_time+.05)
+
+
+
+
