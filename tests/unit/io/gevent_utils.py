@@ -17,7 +17,12 @@ from gevent import monkey
 
 
 def gevent_un_patch_all():
-
+    """
+    A method to unpatch gevent libraries. These are unloaded
+    in the same order that gevent monkey patch loads theirs.
+    Order cannot be arbitrary. This is used in the unit tests to
+    un monkey patch gevent
+    """
     restore_saved_module("os")
     restore_saved_module("time")
     restore_saved_module("thread")
@@ -32,11 +37,19 @@ def gevent_un_patch_all():
 
 
 def restore_saved_module(module):
+    """
+    gevent monkey patch keeps a list of all patched modules.
+    This will restore the original ones
+    :param module: to unpatch
+    :return:
+    """
 
+    # Check the saved attributes in geven monkey patch
     if not (module in monkey.saved):
         return
     _module = __import__(module)
 
+    # If it exist unpatch it
     for attr in monkey.saved[module]:
         if hasattr(_module, attr):
             setattr(_module, attr, monkey.saved[module][attr])

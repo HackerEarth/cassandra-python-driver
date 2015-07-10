@@ -30,6 +30,7 @@ try:
 except ImportError:
     LibevConnection = None  # noqa
 
+
 @patch('socket.socket')
 @patch('cassandra.io.libevwrapper.IO')
 class LibevTimerTest(unittest.TestCase):
@@ -53,8 +54,11 @@ class LibevTimerTest(unittest.TestCase):
         """
         c = self.make_connection()
         c.initialize_reactor()
+        # Tests timers submitted in order at various timeouts
         submit_and_wait_for_completion(self, c, 0, 100, 1, 100)
+        # Tests timers submitted in reverse order at various timeouts
         submit_and_wait_for_completion(self, c, 100, 0, -1, 100)
+        # Tests timers submitted in varying order at various timeouts
         submit_and_wait_for_completion(self, c, 0, 100, 1, 100, True)
 
     def test_timer_cancellation(self, *args):
@@ -71,6 +75,7 @@ class LibevTimerTest(unittest.TestCase):
         # Release context allow for timer thread to run.
         time.sleep(.2)
         timer_manager = connection._libevloop._timers
+        # Assert that the cancellation was honored
         self.assertFalse(timer_manager._queue)
         self.assertFalse(timer_manager._new_timers)
         self.assertFalse(callback.was_invoked())

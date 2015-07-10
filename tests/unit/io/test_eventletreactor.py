@@ -22,7 +22,6 @@ from tests.unit.io.utils import submit_and_wait_for_completion, TimerCallback
 from tests import is_eventlet_monkey_patched
 import time
 
-
 try:
     from cassandra.io.eventletreactor import EventletConnection
 except ImportError:
@@ -48,8 +47,11 @@ class EventletTimerTest(unittest.TestCase):
         """
         Verify that timer timeouts are honored appropriately
         """
+        # Tests timers submitted in order at various timeouts
         submit_and_wait_for_completion(self, EventletConnection, 0, 100, 1, 100)
+        # Tests timers submitted in reverse order at various timeouts
         submit_and_wait_for_completion(self, EventletConnection, 100, 0, -1, 100)
+        # Tests timers submitted in varying order at various timeouts
         submit_and_wait_for_completion(self, EventletConnection, 0, 100, 1, 100, True)
 
     def test_timer_cancellation(self):
@@ -65,6 +67,7 @@ class EventletTimerTest(unittest.TestCase):
         # Release context allow for timer thread to run.
         time.sleep(.2)
         timer_manager = EventletConnection._timers
+        # Assert that the cancellation was honored
         self.assertFalse(timer_manager._queue)
         self.assertFalse(timer_manager._new_timers)
         self.assertFalse(callback.was_invoked())

@@ -17,7 +17,6 @@ try:
 except ImportError:
     import unittest
 from mock import Mock, patch
-
 import time
 
 try:
@@ -43,12 +42,17 @@ class TestTwistedTimer(unittest.TestCase):
         twistedreactor.TwistedConnection.initialize_reactor()
 
     def test_multi_timer_validation(self):
+        """
+        Verify that the timers are called in the correct order
+        """
         twistedreactor.TwistedConnection.initialize_reactor()
         connection = twistedreactor.TwistedConnection('1.2.3.4',
                                                        cql_version='3.0.1')
-
+        # Tests timers submitted in order at various timeouts
         submit_and_wait_for_completion(self, connection, 0, 100, 1, 100)
+        # Tests timers submitted in reverse order at various timeouts
         submit_and_wait_for_completion(self, connection, 100, 0, -1, 100)
+        # Tests timers submitted in varying order at various timeouts
         submit_and_wait_for_completion(self, connection, 0, 100, 1, 100, True)
 
     def test_timer_cancellation(self, *args):
@@ -66,6 +70,7 @@ class TestTwistedTimer(unittest.TestCase):
         # Release context allow for timer thread to run.
         time.sleep(.2)
         timer_manager = connection._loop._timers
+        # Assert that the cancellation was honored
         self.assertFalse(timer_manager._queue)
         self.assertFalse(timer_manager._new_timers)
         self.assertFalse(callback.was_invoked())

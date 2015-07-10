@@ -306,10 +306,11 @@ class ClientExceptionTests(unittest.TestCase):
 
 class TimeoutTimerTest(unittest.TestCase):
     def setUp(self):
-
+        """
+        Setup sessions and pause node1
+        """
         self.cluster = Cluster(protocol_version=PROTOCOL_VERSION)
         self.session = self.cluster.connect()
-        self.nodes_currently_failing = []
         self.node1, self.node2, self.node3 = get_cluster().nodes.values()
         self.cluster = Cluster(protocol_version=PROTOCOL_VERSION)
         self.session = self.cluster.connect()
@@ -323,7 +324,7 @@ class TimeoutTimerTest(unittest.TestCase):
 
     def tearDown(self):
         """
-        Shutdown cluster
+        Shutdown cluster and resume node1
         """
         self.node1.resume()
         self.session.execute("DROP TABLE test3rf.timeout")
@@ -345,6 +346,7 @@ class TimeoutTimerTest(unittest.TestCase):
 
         """
 
+        # Because node1 is stopped these statements will all timeout
         ss = SimpleStatement('SELECT * FROM test3rf.test', consistency_level=ConsistencyLevel.ALL)
 
         # Test with default timeout (should be 10)

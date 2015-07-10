@@ -13,15 +13,14 @@
 # limitations under the License.
 
 import time
-from cassandra.connection import Timer
 
 
 class TimerCallback():
 
     invoked = False
-    created_time = .1
-    invoked_time = .1
-    expected_wait = .1
+    created_time = 0
+    invoked_time = 0
+    expected_wait = 0
 
     def __init__(self, expected_wait):
         self.invoked = False
@@ -47,11 +46,11 @@ class TimerCallback():
 
 def get_timeout(gross_time, start, end, precision, split_range):
     """
-    A somewhat complecated way to generate varying timeouts based on ranges
+    A way to generate varying timeouts based on ranges
     :param gross_time: Some integer between start and end
     :param start: the start value of the range
-    :param end: the end value of the ranged
-    :param precision: the percision to use to generate the timeout.
+    :param end: the end value of the range
+    :param precision: the precision to use to generate the timeout.
     :param split_range: generate values from both ends
     :return: a timeout value to use
     """
@@ -82,7 +81,7 @@ def submit_and_wait_for_completion(unit_test, connection, start, end, increment,
    :param split_range: True to split the range between incrementing and decrementing.
    """
 
-    # Various lists for tracking callback stage
+    # Various lists for tracking callback as completed or pending
     pending_callbacks = []
     completed_callbacks = []
 
@@ -103,6 +102,6 @@ def submit_and_wait_for_completion(unit_test, connection, start, end, increment,
 
     # ensure they are all called back in a timely fashion
     for callback in completed_callbacks:
-        unit_test.assertTrue(callback.expected_wait-.05 <= callback.get_wait_time() <= callback.expected_wait+.05)
+        unit_test.assertTrue(callback.expected_wait-.1 <= callback.get_wait_time() <= callback.expected_wait+.1)
 
 
