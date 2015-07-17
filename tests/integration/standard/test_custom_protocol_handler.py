@@ -20,10 +20,15 @@ except ImportError:
 from cassandra.protocol import ProtocolHandler, ResultMessage, UUIDType, read_int, EventMessage
 from cassandra.query import tuple_factory
 from cassandra.cluster import Cluster
-from tests.integration import use_singledc, PROTOCOL_VERSION, datatype_utils, execute_until_pass
-from tests.integration.datatype_utils import PRIMITIVE_DATATYPES,get_sample
+from tests.integration import use_singledc, PROTOCOL_VERSION, execute_until_pass
+from tests.integration.datatype_utils import update_datatypes, PRIMITIVE_DATATYPES, get_sample
 import time
 import uuid
+
+
+def setup_module():
+    use_singledc()
+    update_datatypes()
 
 
 class CustomProtocolHandlerTest(unittest.TestCase):
@@ -65,11 +70,11 @@ class CustomProtocolHandlerTest(unittest.TestCase):
         session.shutdown()
 
         # Connect using our custom protocol handler, make sure we get raw data back
-        s = Cluster(protocol_handler_class=CustomTestRawRowType).connect()
+        s = Cluster().connect()
+        s.client_protocol_handler = CustomTestRawRowType
+        session.client_protocol_handler = CustomTestRawRowType
         s.row_factory = tuple_factory
         result_set = s.execute("SELECT schema_version FROM system.local")
-        print type(result_set)
-        print result_set
         result = result_set.pop()
         raw_value = result.pop()
         self.assertEqual(type(raw_value), str)
@@ -100,19 +105,20 @@ class CustomProtocolHandlerTest(unittest.TestCase):
         @test_category data_types:serialization
         """
         # Connect using a custom protocol handler that tracks the various types the result message is used with.
-        s = Cluster(protocol_handler_class=CustomProtocolHandlerResultMessageTracked).connect(keyspace="custserdes")
-        s.row_factory = tuple_factory
+        session = Cluster().connect(keyspace="custserdes")
+        session.client_protocol_handler = CustomProtocolHandlerResultMessageTracked
+        session.row_factory = tuple_factory
 
-        columns_string = create_table_with_all_types("test_table", s)
+        columns_string = create_table_with_all_types("test_table", session)
 
         # verify data
         params = get_all_primitive_params()
-        results = s.execute("SELECT {0} FROM alltypes WHERE zz=0".format(columns_string))[0]
+        results = session.execute("SELECT {0} FROM alltypes WHERE zz=0".format(columns_string))[0]
         for expected, actual in zip(params, results):
             self.assertEqual(actual, expected)
         # Ensure we have covered the various primitive types
-        self.assertEqual(len(CustomResultMessageTracked.checked_rev_row_set), len(PRIMITIVE_DATATYPES))
-        s.shutdown()
+        self.assertEqual(len(CustomResultMessageTracked.checked_rev_row_set), len(PRIMITIVE_DATATYPES)-1)
+        session.shutdown()
 
 
 def create_table_with_all_types(table_name, session):
@@ -139,7 +145,6 @@ def create_table_with_all_types(table_name, session):
     columns_string = ', '.join(col_names)
     placeholders = ', '.join(["%s"] * len(col_names))
     session.execute("INSERT INTO alltypes ({0}) VALUES ({1})".format(columns_string, placeholders), params, timeout=120)
-    time.sleep(10000)
     return columns_string
 
 
@@ -151,16 +156,6 @@ def get_all_primitive_params():
     for datatype in PRIMITIVE_DATATYPES:
         params.append((get_sample(datatype)))
     return params
-
-
-class CustomTestRawRowType(ProtocolHandler):
-    """
-    This is the a custom protocol handler that will substitute the the
-    customResultMesageRowRaw Result message for our own implementation
-    """
-    my_opcodes = ProtocolHandler.message_types_by_opcode.copy()
-    my_opcodes[CustomResultMessageRaw.opcode] = CustomResultMessageRaw
-    message_types_by_opcode = my_opcodes
 
 
 class CustomResultMessageRaw(ResultMessage):
@@ -181,6 +176,16 @@ class CustomResultMessageRaw(ResultMessage):
             return (paging_state, (coltypes, rows))
 
 
+class CustomTestRawRowType(ProtocolHandler):
+    """
+    This is the a custom protocol handler that will substitute the the
+    customResultMesageRowRaw Result message for our own implementation
+    """
+    my_opcodes = ProtocolHandler.message_types_by_opcode.copy()
+    my_opcodes[CustomResultMessageRaw.opcode] = CustomResultMessageRaw
+    message_types_by_opcode = my_opcodes
+
+
 class CustomResultMessageTracked(ResultMessage):
     """
     This is a custom Result Message that is use to track what primitive types
@@ -199,7 +204,6 @@ class CustomResultMessageTracked(ResultMessage):
         colnames = [c[2] for c in column_metadata]
         coltypes = [c[3] for c in column_metadata]
         cls.checked_rev_row_set.update(coltypes)
-        print "Ctypes are:" + str(coltypes)
         parsed_rows = [
             tuple(ctype.from_binary(val, protocol_version)
                   for ctype, val in zip(coltypes, row))
