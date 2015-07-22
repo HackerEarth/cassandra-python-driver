@@ -159,11 +159,11 @@ def setup_connections(connections, **kwargs):
     session = SessionManager()
     for cluster_name, hosts_info in connections.iteritems():
         for keyspace, hosts in hosts_info.iteritems():
-            session.add_session(hosts, keyspace, cluster_name)
+            session.add_connection(hosts, keyspace, cluster_name)
 
 
 def execute(query, params=None, consistency_level=None, timeout=NOT_SET,
-        session_key=None):
+        connection_key=None):
 
     handle_lazy_connect()
 
@@ -188,7 +188,7 @@ def execute(query, params=None, consistency_level=None, timeout=NOT_SET,
 
     params = params or {}
     result = session.execute(query, params, timeout=timeout,
-            session_key=session_key)
+            connection_key=connection_key)
 
     return result
 
@@ -199,29 +199,33 @@ class SessionManager(object):
     """
     def __init__(self):
         self._sessions = {}
+        self._clusters = {}
 
-    def create_session(self, hosts, keyspace):
+    def create_cluster_and_session(self, cluster_name, hosts):
         cluster = Cluster(hosts)
         try:
-            session = cluster.connect(keyspace=keyspace)
+            session = cluster.connect()
             log.debug("SessionManager: setting up connection ")
         except Exception, e:
             raise
         session.row_factory = dict_factory
-        return session
+        return (cluster, session)
 
-    def add_session(self, hosts, keyspace, cluster_name):
-        session = self.create_session(hosts, keyspace)
-        key = get_session_key(cluster_name, keyspace)
+    def add_connection(self, hosts, keyspace, cluster_name):
+        (cluster, session) = self.create_cluster_and_session(cluster_name, hosts)
+        key = get_connection_key(cluster_name, keyspace)
         self._sessions.update({
             key: session})
+        self._clusters.update({
+            key: cluster
+            })
 
     def execute(self, query, parameters=None, timeout=NOT_SET, trace=False,
-            session_key=None):
-       session = self._sessions.get(session_key)
+            connection_key=None):
+       session = self._sessions.get(connection_key)
        if not session:
            raise Exception("No session found for the given session key" +
-                   session_key)
+                   connection_key)
        return session.execute(query, parameters=parameters, timeout=timeout,
                trace=trace)
 
@@ -230,7 +234,7 @@ def get_session():
     handle_lazy_connect()
     return session
 
-def get_session_key(clustername, keyspace):
+def get_connection_key(clustername, keyspace):
     """Returns the key for the given clustername and keyspace.
 
     This key is mapped to its  Session object in global object
@@ -240,8 +244,13 @@ def get_session_key(clustername, keyspace):
     key = key_format.format(clustername=clustername, keyspace=keyspace)
     return key
 
-def get_cluster():
-    handle_lazy_connect()
+def get_cluster(clustername, keyspace):
+    #handle_lazy_connect()
+    global session
+    connection_key = get_connection_key(clustername, keyspace)
+    print connection_key
+    print session._clusters
+    cluster = session._clusters.get(connection_key)
     if not cluster:
         raise CQLEngineException("%s.cluster is not configured. Call one of the setup or default functions first." % __name__)
     return cluster

@@ -22,7 +22,7 @@ import warnings
 from cassandra import metadata
 from cassandra.cqlengine import CQLEngineException, SizeTieredCompactionStrategy, LeveledCompactionStrategy
 from cassandra.cqlengine import columns
-from cassandra.cqlengine.connection import execute, get_cluster
+from cassandra.cqlengine.connection import execute, get_cluster, get_connection_key
 from cassandra.cqlengine.models import Model
 from cassandra.cqlengine.named import NamedTable
 from cassandra.cqlengine.usertype import UserType
@@ -37,7 +37,7 @@ log = logging.getLogger(__name__)
 schema_columnfamilies = NamedTable('system', 'schema_columnfamilies')
 
 
-def create_keyspace(name, strategy_class, replication_factor, durable_writes=True, **replication_values):
+def create_keyspace(clustername, keyspace, strategy_class, replication_factor, durable_writes=True, **replication_values):
     """
     *Deprecated - use :func:`create_keyspace_simple` or :func:`create_keyspace_network_topology` instead*
 
@@ -63,9 +63,9 @@ def create_keyspace(name, strategy_class, replication_factor, durable_writes=Tru
     warnings.warn(msg, DeprecationWarning)
     log.warning(msg)
 
-    cluster = get_cluster()
+    cluster = get_cluster(clustername, keyspace)
 
-    if name not in cluster.metadata.keyspaces:
+    if keyspace not in cluster.metadata.keyspaces:
         # try the 1.2 method
         replication_map = {
             'class': strategy_class,
@@ -81,7 +81,7 @@ def create_keyspace(name, strategy_class, replication_factor, durable_writes=Tru
         query = """
         CREATE KEYSPACE {}
         WITH REPLICATION = {}
-        """.format(name, json.dumps(replication_map).replace('"', "'"))
+        """.format(keyspace, json.dumps(replication_map).replace('"', "'"))
 
         if strategy_class != 'SimpleStrategy':
             query += " AND DURABLE_WRITES = {}".format('true' if durable_writes else 'false')
@@ -89,7 +89,7 @@ def create_keyspace(name, strategy_class, replication_factor, durable_writes=Tru
         execute(query)
 
 
-def create_keyspace_simple(name, replication_factor, durable_writes=True):
+def create_keyspace_simple(clustername, keyspace, replication_factor, durable_writes=True):
     """
     Creates a keyspace with SimpleStrategy for replica placement
 
@@ -104,11 +104,11 @@ def create_keyspace_simple(name, replication_factor, durable_writes=True):
     :param int replication_factor: keyspace replication factor, used with :attr:`~.SimpleStrategy`
     :param bool durable_writes: Write log is bypassed if set to False
     """
-    _create_keyspace(name, durable_writes, 'SimpleStrategy',
+    _create_keyspace(clustername, keyspace,  durable_writes, 'SimpleStrategy',
                      {'replication_factor': replication_factor})
 
 
-def create_keyspace_network_topology(name, dc_replication_map, durable_writes=True):
+def create_keyspace_network_topology(clustername, keyspace, dc_replication_map, durable_writes=True):
     """
     Creates a keyspace with NetworkTopologyStrategy for replica placement
 
@@ -123,31 +123,31 @@ def create_keyspace_network_topology(name, dc_replication_map, durable_writes=Tr
     :param dict dc_replication_map: map of dc_names: replication_factor
     :param bool durable_writes: Write log is bypassed if set to False
     """
-    _create_keyspace(name, durable_writes, 'NetworkTopologyStrategy', dc_replication_map)
+    _create_keyspace(clustername, keyspace, durable_writes, 'NetworkTopologyStrategy', dc_replication_map)
 
 
-def _create_keyspace(name, durable_writes, strategy_class, strategy_options):
+def _create_keyspace(clustername, keyspace, durable_writes, strategy_class, strategy_options):
     if not _allow_schema_modification():
         return
 
-    cluster = get_cluster()
+    cluster = get_cluster(clustername, keyspace)
 
-    if name not in cluster.metadata.keyspaces:
-        log.info("Creating keyspace %s ", name)
-        ks_meta = metadata.KeyspaceMetadata(name, durable_writes, strategy_class, strategy_options)
+    if keyspace not in cluster.metadata.keyspaces:
+        log.info("Creating keyspace %s ", keyspace)
+        ks_meta = metadata.KeyspaceMetadata(keyspace, durable_writes, strategy_class, strategy_options)
         execute(ks_meta.as_cql_query())
     else:
-        log.info("Not creating keyspace %s because it already exists", name)
+        log.info("Not creating keyspace %s because it already exists", keyspace)
 
 
-def delete_keyspace(name):
+def delete_keyspace(clustername, keyspace):
     msg = "Deprecated. Use drop_keyspace instead"
     warnings.warn(msg, DeprecationWarning)
     log.warning(msg)
-    drop_keyspace(name)
+    drop_keyspace(clustername, keyspace)
 
 
-def drop_keyspace(name):
+def drop_keyspace(clustername, keyspace):
     """
     Drops a keyspace, if it exists.
 
@@ -161,9 +161,9 @@ def drop_keyspace(name):
     if not _allow_schema_modification():
         return
 
-    cluster = get_cluster()
-    if name in cluster.metadata.keyspaces:
-        execute("DROP KEYSPACE {}".format(name))
+    cluster = get_cluster(clustername, keyspace)
+    if keyspace in cluster.metadata.keyspaces:
+        execute("DROP KEYSPACE {}".format(keyspace))
 
 
 def sync_table(model):
@@ -197,7 +197,7 @@ def sync_table(model):
 
     ks_name = model._get_keyspace()
 
-    cluster = get_cluster()
+    cluster = get_cluster(model.__clustername__, model.__keyspace__)
 
     keyspace = cluster.metadata.keyspaces[ks_name]
     tables = keyspace.tables

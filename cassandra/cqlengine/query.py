@@ -274,10 +274,10 @@ class AbstractQuerySet(object):
         if self._batch:
             return self._batch.add_query(q)
         else:
-            session_key = connection.get_session_key(self.model.__clustername__,
+            connection_key = connection.get_connection_key(self.model.__clustername__,
                     self.model.__keyspace__)
             result = connection.execute(q, consistency_level=self._consistency,
-                    timeout=self._timeout, session_key=session_key)
+                    timeout=self._timeout, connection_key=connection_key)
             if self._transaction:
                 check_applied(result)
             return result
@@ -1042,10 +1042,10 @@ class DMLQuery(object):
         if self._batch:
             return self._batch.add_query(q)
         else:
-            session_key =  connection.get_session_key(self.model.__clustername__,
+            connection_key =  connection.get_connection_key(self.model.__clustername__,
                     self.model.__keyspace)
             tmp = connection.execute(q, consistency_level=self._consistency,
-                    timeout=self._timeout, session_key=session_key)
+                    timeout=self._timeout, connection_key=connection_key)
             if self._if_not_exists or self._transaction:
                 check_applied(tmp)
             return tmp
