@@ -107,13 +107,10 @@ def setup(
     global cluster, session, default_consistency_level, lazy_connect_args
 
     if 'username' in kwargs or 'password' in kwargs:
-        raise CQLEngineException("Username & Password are now handled by using the native driver's auth_provider")
-
-    if not default_keyspace:
-        raise UndefinedKeyspaceException()
+        raise CQLEngineException("username & password are now handled by using the native driver's auth_provider")
 
     from cassandra.cqlengine import models
-    models.DEFAULT_KEYSPACE = default_keyspace
+    models.default_keyspace = default_keyspace
 
     default_consistency_level = consistency
     if lazy_connect:
@@ -124,7 +121,7 @@ def setup(
         lazy_connect_args = (hosts, kwargs)
         return
 
-    cluster = Cluster(hosts, **kwargs)
+    cluster = cluster(hosts, **kwargs)
     try:
         session = cluster.connect()
         log.debug("cqlengine connection initialized with internally created session")
@@ -142,7 +139,31 @@ def setup(
     _register_known_types(cluster)
 
 
-def execute(query, params=None, consistency_level=None, timeout=NOT_SET):
+def setup_connections(connections, **kwargs):
+    """Replaces the global session variable with a SessionManager object
+    and sets up the sessions for the connection parameters provided
+    in the connections dict.
+
+    Expected format of connections dict.
+
+    CASSANDRA_CONNECTIONS = {
+        <cluster_name_1:str>: {
+            <keyspace:str>: <hosts:list>
+         },
+        <cluster_name_2:str>: {
+            <keyspace: str>: <hosts:list>
+        }
+    }
+    """
+    global session
+    session = SessionManager()
+    for cluster_name, hosts_info in connections.iteritems():
+        for keyspace, hosts in hosts_info.iteritems():
+            session.add_session(hosts, keyspace, cluster_name)
+
+
+def execute(query, params=None, consistency_level=None, timeout=NOT_SET,
+        session_key=None):
 
     handle_lazy_connect()
 
@@ -166,15 +187,58 @@ def execute(query, params=None, consistency_level=None, timeout=NOT_SET):
     log.debug(query.query_string)
 
     params = params or {}
-    result = session.execute(query, params, timeout=timeout)
+    result = session.execute(query, params, timeout=timeout,
+            session_key=session_key)
 
     return result
+
+class SessionManager(object):
+    """SessionManager replaces the native Session object that is set globally.
+    This class is responsible for maintaining multiple sessions per  cluster
+    and keyspace combination.
+    """
+    def __init__(self):
+        self._sessions = {}
+
+    def create_session(self, hosts, keyspace):
+        cluster = Cluster(hosts)
+        try:
+            session = cluster.connect(keyspace=keyspace)
+            log.debug("SessionManager: setting up connection ")
+        except Exception, e:
+            raise
+        session.row_factory = dict_factory
+        return session
+
+    def add_session(self, hosts, keyspace, cluster_name):
+        session = self.create_session(hosts, keyspace)
+        key = get_session_key(cluster_name, keyspace)
+        self._sessions.update({
+            key: session})
+
+    def execute(self, query, parameters=None, timeout=NOT_SET, trace=False,
+            session_key=None):
+       session = self._sessions.get(session_key)
+       if not session:
+           raise Exception("No session found for the given session key" +
+                   session_key)
+       return session.execute(query, parameters=parameters, timeout=timeout,
+               trace=trace)
 
 
 def get_session():
     handle_lazy_connect()
     return session
 
+def get_session_key(clustername, keyspace):
+    """Returns the key for the given clustername and keyspace.
+
+    This key is mapped to its  Session object in global object
+    of SessionManager class.
+    """
+    key_format = "{clustername}__{keyspace}"
+    key = key_format.format(clustername=clustername, keyspace=keyspace)
+    return key
 
 def get_cluster():
     handle_lazy_connect()
@@ -213,3 +277,7 @@ def _register_known_types(cluster):
                 cluster.register_user_type(ks_name, type_name, klass)
             except UserTypeDoesNotExist:
                 pass  # new types are covered in management sync functions
+
+
+
+
