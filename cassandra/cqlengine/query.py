@@ -1043,7 +1043,7 @@ class DMLQuery(object):
             return self._batch.add_query(q)
         else:
             connection_key =  connection.get_connection_key(self.model.__clustername__,
-                    self.model.__keyspace)
+                    self.model.__keyspace__)
             tmp = connection.execute(q, consistency_level=self._consistency,
                     timeout=self._timeout, connection_key=connection_key)
             if self._if_not_exists or self._transaction:
