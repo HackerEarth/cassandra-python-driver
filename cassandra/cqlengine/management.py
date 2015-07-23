@@ -198,7 +198,8 @@ def sync_table(model):
     ks_name = model._get_keyspace()
 
     cluster = get_cluster(model.__clustername__, model.__keyspace__)
-
+    connection_key = get_connection_key(
+            model.__clustername__, model.__keyspace__)
     keyspace = cluster.metadata.keyspaces[ks_name]
     tables = keyspace.tables
 
@@ -215,7 +216,7 @@ def sync_table(model):
         qs = get_create_table(model)
 
         try:
-            execute(qs)
+            execute(qs, connection_key=connection_key)
         except CQLEngineException as ex:
             # 1.2 doesn't return cf names, so we have to examine the exception
             # and ignore if it says the column family already exists
@@ -237,7 +238,7 @@ def sync_table(model):
 
             # add missing column using the column def
             query = "ALTER TABLE {} add {}".format(cf_name, col.get_column_def())
-            execute(query)
+            execute(query, connection_key=connection_key)
 
         db_fields_not_in_model = model_fields.symmetric_difference(field_names)
         if db_fields_not_in_model:
@@ -257,7 +258,7 @@ def sync_table(model):
         qs += ['ON {}'.format(cf_name)]
         qs += ['("{}")'.format(column.db_field_name)]
         qs = ' '.join(qs)
-        execute(qs)
+        execute(qs, connection_key=connection_key)
 
 
 def sync_type(ks_name, type_model):
@@ -436,7 +437,9 @@ def get_fields(model):
     col_family = model.column_family_name(include_keyspace=False)
     field_types = ['regular', 'static']
     query = "select * from system.schema_columns where keyspace_name = %s and columnfamily_name = %s"
-    tmp = execute(query, [ks_name, col_family])
+    connection_key = get_connection_key(
+            model.__clustername__, model.__keyspace__)
+    tmp = execute(query, [ks_name, col_family], connection_key=connection_key)
 
     # Tables containing only primary keys do not appear to create
     # any entries in system.schema_columns, as only non-primary-key attributes
@@ -491,6 +494,9 @@ def update_compaction(model):
         if val != v:
             do_update = True
 
+    connection_key = get_connection_key(
+            model.__clustername__, model.__keyspace__)
+
     # check compaction_strategy_options
     if do_update:
         options = get_compaction_options(model)
@@ -498,7 +504,7 @@ def update_compaction(model):
         options = json.dumps(options).replace('"', "'")
         cf_name = model.column_family_name()
         query = "ALTER TABLE {} with compaction = {}".format(cf_name, options)
-        execute(query)
+        execute(query, connection_key=connection_key)
         return True
 
     return False
