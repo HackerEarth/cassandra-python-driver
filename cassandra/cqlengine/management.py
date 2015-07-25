@@ -453,7 +453,7 @@ def get_fields(model):
 
 def get_table_settings(model):
     # returns the table as provided by the native driver for a given model
-    cluster = get_cluster()
+    cluster = get_cluster(model.__clustername__, model.__keyspace__)
     ks = model._get_keyspace()
     table = model.column_family_name(include_keyspace=False)
     table = cluster.metadata.keyspaces[ks].tables[table]
